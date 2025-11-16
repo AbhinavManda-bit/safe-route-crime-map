@@ -37,7 +37,8 @@ function mapCrimeType(primaryType, description) {
     if (type.includes("ASSAULT")) return "ASSAULT";
     if (type.includes("ROBBERY")) return "ROBBERY";
     
-    return null; // Don't include crimes we don't track
+    // FIXED: Return default instead of null
+    return "THEFT"; // Default fallback instead of null
 }
 
 // Add crime severity scoring
@@ -55,17 +56,13 @@ function getCrimeSeverity(type) {
 // === CRIME DATA ENDPOINT ===
 app.get("/api/crime", async (req, res) => {
     try {
-        // Get crime data from last 6 months
-        const now = new Date();
-        const sixMonthsAgo = new Date(now);
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const dateFilter = sixMonthsAgo.toISOString();
+        // FIXED: Use fixed date like v1 for consistency
+        const dateFilter = '2024-11-01';
         
-        // Increase limit and add more specific filtering
-        const url = `https://data.cityofchicago.org/resource/ijzp-q8t2.json?$limit=10000&$where=date>'${dateFilter}' AND latitude IS NOT NULL AND longitude IS NOT NULL&$order=date DESC`;
+        // FIXED: Use reasonable limit (v1 used 500, we'll use 2000 for more data)
+        const url = `https://data.cityofchicago.org/resource/ijzp-q8t2.json?$limit=2000&$where=date>'${dateFilter}' AND latitude IS NOT NULL AND longitude IS NOT NULL&$order=date DESC`;
 
-        console.log(`📅 Current date: ${now.toISOString().split('T')[0]}`);
-        console.log(`📅 Fetching crimes since: ${sixMonthsAgo.toISOString().split('T')[0]} (6 months ago)`);
+        console.log(`📅 Fetching crimes since: ${dateFilter}`);
         console.log(`🔗 API URL: ${url}`);
 
         const response = await axios.get(url, {
@@ -82,16 +79,14 @@ app.get("/api/crime", async (req, res) => {
         const crimeStats = {};
         
         const points = data
+            .filter(d => d.latitude && d.longitude) // Keep filter
             .map(d => {
                 const mappedType = mapCrimeType(d.primary_type || "", d.description || "");
                 
                 // Track statistics
-                if (mappedType) {
-                    crimeStats[mappedType] = (crimeStats[mappedType] || 0) + 1;
-                }
+                crimeStats[mappedType] = (crimeStats[mappedType] || 0) + 1;
                 
-                if (!mappedType) return null;
-                
+                // FIXED: Always return an object (no null filtering)
                 return {
                     lat: parseFloat(d.latitude),
                     lng: parseFloat(d.longitude),
@@ -104,8 +99,7 @@ app.get("/api/crime", async (req, res) => {
                     block: d.block || "Unknown location",
                     arrestMade: d.arrest === "true" || d.arrest === true
                 };
-            })
-            .filter(p => p !== null); // Remove unmapped crimes
+            });
 
         console.log(`✅ Mapped ${points.length} crime points`);
         console.log(`📊 Crime breakdown:`, crimeStats);
