@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const notification = document.getElementById('errorNotification');
         const messageSpan = document.getElementById('errorMessage');
         
+        if (!notification || !messageSpan) return;
+        
         messageSpan.textContent = message;
         notification.classList.add('active');
         
@@ -80,9 +82,15 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             console.log("Fetching crime data...");
             const res = await fetch("/api/crime");
-            const json = await res.json();
-            allCrimeData = json.points;
             
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const json = await res.json();
+            allCrimeData = json.points || [];
+            
+            // Extract and sort dates
             const dates = allCrimeData
                 .map(p => p.rawDate || p.date)
                 .filter(d => d)
@@ -100,10 +108,16 @@ document.addEventListener('DOMContentLoaded', function() {
             
             crimeData = allCrimeData;
             console.log(`✅ Loaded ${crimeData.length} crime points`);
+            
+            // Show stats if available
+            if (json.stats) {
+                console.log(`📊 Crime breakdown:`, json.stats);
+            }
+            
             renderCrime();
         } catch(e) {
             console.error("❌ Error fetching crime data:", e);
-            showError("Failed to load crime data. Make sure the server is running!");
+            showError("Failed to load crime data. Make sure the server is running on port 5000!");
         }
     }
 
@@ -126,6 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 fillColor: crimeColors[p.type] || "#999",
                 fillOpacity: 0.6
             }).addTo(map);
+            
             marker.bindPopup(`<b>${p.type}</b><br>${p.desc || ''}<br><small>${p.date || ''}</small>`);
             markers.push(marker);
 
@@ -214,11 +229,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setupAutocomplete(inputElement, suggestionsElement) {
+        if (!inputElement || !suggestionsElement) return;
+        
         let selectedFromDropdown = false;
         
         inputElement.addEventListener('input', function() {
             clearTimeout(autocompleteTimeout);
-            selectedFromDropdown = false; // Reset flag when typing
+            selectedFromDropdown = false;
             const query = this.value.trim();
             
             if (query.length < 3) {
@@ -309,7 +326,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await res.json();
             
             if (data.code === 'Ok' && data.routes) {
-                // Return up to 3 routes
                 return data.routes.slice(0, 3);
             }
         } catch(e) {
@@ -385,7 +401,6 @@ document.addEventListener('DOMContentLoaded', function() {
         routesWithSafety.forEach((route, displayIndex) => {
             const latlngs = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
             
-            // Colors: Dark blue for safest, lighter blues for alternatives
             const colors = ['#003d99', '#6699cc', '#99bbdd'];
             const weights = [6, 5, 4];
             
@@ -397,14 +412,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             routeLines.push(line);
             
-            // Click handler to select route
             line.on('click', () => selectRoute(displayIndex));
         });
         
-        // Show route options panel
         displayRouteOptions(routesWithSafety);
         
-        // Fit map to show all routes
         if (routeLines.length > 0) {
             const group = L.featureGroup(routeLines);
             map.fitBounds(group.getBounds(), { padding: [50, 50] });
@@ -417,6 +429,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayRouteOptions(routes) {
         const routeOptions = document.getElementById('routeOptions');
         const routeInfoBox = document.getElementById('routeInfoBox');
+        
+        if (!routeOptions || !routeInfoBox) return;
         
         routeOptions.innerHTML = routes.map((route, index) => {
             const distanceKm = (route.distance / 1000).toFixed(1);
@@ -442,7 +456,6 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }).join('');
         
-        // Add click handlers to route options
         routeOptions.querySelectorAll('.route-option').forEach(option => {
             option.addEventListener('click', function() {
                 const index = parseInt(this.dataset.index);
@@ -457,7 +470,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function selectRoute(index) {
         selectedRouteIndex = index;
         
-        // Update visual emphasis on map
         routeLines.forEach((line, i) => {
             if (i === index) {
                 line.setStyle({ opacity: 0.9, weight: 6 });
@@ -467,7 +479,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Update selection in UI
         document.querySelectorAll('.route-option').forEach((option, i) => {
             if (i === index) {
                 option.classList.add('selected');
@@ -506,7 +517,6 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 console.log(`🔍 Finding routes from "${start}" to "${end}"`);
                 
-                // Add a small delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
                 const startCoord = await geocode(start);
@@ -518,7 +528,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Add another small delay
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
                 const endCoord = await geocode(end);
@@ -532,7 +541,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 console.log("✅ Geocoding successful:", startCoord, endCoord);
 
-                // Get up to 3 alternative routes
                 const routes = await getRouteAlternatives(startCoord, endCoord);
                 
                 if (!routes || routes.length === 0) {
@@ -544,7 +552,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 console.log(`✅ Found ${routes.length} routes`);
                 
-                // Draw all routes on the map
                 drawRoutes(routes, startCoord, endCoord);
                 
             } catch(e) {
@@ -563,78 +570,80 @@ document.addEventListener('DOMContentLoaded', function() {
     const resizeHandle = document.getElementById('resizeHandle');
     const resetBtn = document.getElementById('resetBtn');
     
-    let isDragging = false;
-    let isResizing = false;
-    let dragStartX, dragStartY, initialLeft, initialTop, initialWidth, initialHeight;
+    if (sidebar && sidebarHeader && resizeHandle && resetBtn) {
+        let isDragging = false;
+        let isResizing = false;
+        let dragStartX, dragStartY, initialLeft, initialTop, initialWidth, initialHeight;
 
-    const defaultPosition = { left: '10px', bottom: '10px', top: 'auto', width: '260px', height: 'auto' };
+        const defaultPosition = { left: '10px', bottom: '10px', top: 'auto', width: '260px', height: 'auto' };
 
-    resetBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        sidebar.style.left = defaultPosition.left;
-        sidebar.style.bottom = defaultPosition.bottom;
-        sidebar.style.top = defaultPosition.top;
-        sidebar.style.width = defaultPosition.width;
-        sidebar.style.height = defaultPosition.height;
-    });
+        resetBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sidebar.style.left = defaultPosition.left;
+            sidebar.style.bottom = defaultPosition.bottom;
+            sidebar.style.top = defaultPosition.top;
+            sidebar.style.width = defaultPosition.width;
+            sidebar.style.height = defaultPosition.height;
+        });
 
-    sidebarHeader.addEventListener('mousedown', function(e) {
-        if (e.target === resizeHandle || resizeHandle.contains(e.target)) return;
-        
-        isDragging = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        
-        const rect = sidebar.getBoundingClientRect();
-        initialLeft = rect.left;
-        initialTop = rect.top;
-        
-        sidebar.style.bottom = 'auto';
-        e.preventDefault();
-    });
-
-    resizeHandle.addEventListener('mousedown', function(e) {
-        isResizing = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        
-        const rect = sidebar.getBoundingClientRect();
-        initialWidth = rect.width;
-        initialHeight = rect.height;
-        
-        e.stopPropagation();
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', function(e) {
-        if (isDragging) {
-            const deltaX = e.clientX - dragStartX;
-            const deltaY = e.clientY - dragStartY;
+        sidebarHeader.addEventListener('mousedown', function(e) {
+            if (e.target === resizeHandle || resizeHandle.contains(e.target)) return;
             
-            sidebar.style.left = (initialLeft + deltaX) + 'px';
-            sidebar.style.top = (initialTop + deltaY) + 'px';
-        }
-        
-        if (isResizing) {
-            const deltaX = e.clientX - dragStartX;
-            const deltaY = e.clientY - dragStartY;
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
             
-            const newWidth = initialWidth + deltaX;
-            const newHeight = initialHeight + deltaY;
+            const rect = sidebar.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
             
-            if (newWidth >= 260 && newWidth <= 600) {
-                sidebar.style.width = newWidth + 'px';
+            sidebar.style.bottom = 'auto';
+            e.preventDefault();
+        });
+
+        resizeHandle.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            const rect = sidebar.getBoundingClientRect();
+            initialWidth = rect.width;
+            initialHeight = rect.height;
+            
+            e.stopPropagation();
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isDragging) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                
+                sidebar.style.left = (initialLeft + deltaX) + 'px';
+                sidebar.style.top = (initialTop + deltaY) + 'px';
             }
-            if (newHeight >= 200) {
-                sidebar.style.height = newHeight + 'px';
+            
+            if (isResizing) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                
+                const newWidth = initialWidth + deltaX;
+                const newHeight = initialHeight + deltaY;
+                
+                if (newWidth >= 260 && newWidth <= 600) {
+                    sidebar.style.width = newWidth + 'px';
+                }
+                if (newHeight >= 200) {
+                    sidebar.style.height = newHeight + 'px';
+                }
             }
-        }
-    });
+        });
 
-    document.addEventListener('mouseup', function() {
-        isDragging = false;
-        isResizing = false;
-    });
+        document.addEventListener('mouseup', function() {
+            isDragging = false;
+            isResizing = false;
+        });
+    }
 
     // Date Filter Setup
     const dateFilterBtn = document.getElementById('dateFilterBtn');
@@ -650,6 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setupDateSliders() {
         if (availableDates.length === 0) return;
+        if (!startDateSlider || !endDateSlider || !startDateValue || !endDateValue) return;
         
         const minDate = availableDates[0];
         const maxDate = availableDates[availableDates.length - 1];
@@ -669,60 +679,71 @@ document.addEventListener('DOMContentLoaded', function() {
         endDateValue.textContent = maxDate.toLocaleDateString();
     }
     
-    dateFilterBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        dateFilterPopup.classList.toggle('active');
-    });
-    
-    startDateSlider.addEventListener('input', function() {
-        const index = parseInt(this.value);
-        tempStartDate = availableDates[index];
-        startDateValue.textContent = tempStartDate.toLocaleDateString();
-        
-        if (index > parseInt(endDateSlider.value)) {
-            endDateSlider.value = index;
-            tempEndDate = availableDates[index];
-            endDateValue.textContent = tempEndDate.toLocaleDateString();
-        }
-    });
-    
-    endDateSlider.addEventListener('input', function() {
-        const index = parseInt(this.value);
-        tempEndDate = availableDates[index];
-        endDateValue.textContent = tempEndDate.toLocaleDateString();
-        
-        if (index < parseInt(startDateSlider.value)) {
-            startDateSlider.value = index;
-            tempStartDate = availableDates[index];
-            startDateValue.textContent = tempStartDate.toLocaleDateString();
-        }
-    });
-    
-    applyDateBtn.addEventListener('click', function() {
-        dateRange.start = tempStartDate;
-        dateRange.end = tempEndDate;
-        
-        crimeData = allCrimeData.filter(crime => {
-            if (!crime.rawDate && !crime.date) return true;
-            const crimeDate = new Date(crime.rawDate || crime.date);
-            return crimeDate >= dateRange.start && crimeDate <= dateRange.end;
+    if (dateFilterBtn && dateFilterPopup) {
+        dateFilterBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dateFilterPopup.classList.toggle('active');
         });
-        
-        console.log(`✅ Filtered to ${crimeData.length} crimes between ${dateRange.start.toLocaleDateString()} and ${dateRange.end.toLocaleDateString()}`);
-        renderCrime();
-        dateFilterPopup.classList.remove('active');
-    });
+    }
     
-    cancelDateBtn.addEventListener('click', function() {
-        dateFilterPopup.classList.remove('active');
-        setupDateSliders();
-    });
+    if (startDateSlider) {
+        startDateSlider.addEventListener('input', function() {
+            const index = parseInt(this.value);
+            tempStartDate = availableDates[index];
+            if (startDateValue) startDateValue.textContent = tempStartDate.toLocaleDateString();
+            
+            if (endDateSlider && index > parseInt(endDateSlider.value)) {
+                endDateSlider.value = index;
+                tempEndDate = availableDates[index];
+                if (endDateValue) endDateValue.textContent = tempEndDate.toLocaleDateString();
+            }
+        });
+    }
+    
+    if (endDateSlider) {
+        endDateSlider.addEventListener('input', function() {
+            const index = parseInt(this.value);
+            tempEndDate = availableDates[index];
+            if (endDateValue) endDateValue.textContent = tempEndDate.toLocaleDateString();
+            
+            if (startDateSlider && index < parseInt(startDateSlider.value)) {
+                startDateSlider.value = index;
+                tempStartDate = availableDates[index];
+                if (startDateValue) startDateValue.textContent = tempStartDate.toLocaleDateString();
+            }
+        });
+    }
+    
+    if (applyDateBtn) {
+        applyDateBtn.addEventListener('click', function() {
+            dateRange.start = tempStartDate;
+            dateRange.end = tempEndDate;
+            
+            crimeData = allCrimeData.filter(crime => {
+                if (!crime.rawDate && !crime.date) return true;
+                const crimeDate = new Date(crime.rawDate || crime.date);
+                return crimeDate >= dateRange.start && crimeDate <= dateRange.end;
+            });
+            
+            console.log(`✅ Filtered to ${crimeData.length} crimes between ${dateRange.start.toLocaleDateString()} and ${dateRange.end.toLocaleDateString()}`);
+            renderCrime();
+            if (dateFilterPopup) dateFilterPopup.classList.remove('active');
+        });
+    }
+    
+    if (cancelDateBtn && dateFilterPopup) {
+        cancelDateBtn.addEventListener('click', function() {
+            dateFilterPopup.classList.remove('active');
+            setupDateSliders();
+        });
+    }
 
     // Route Info Box Close Button
     const closeRouteInfo = document.getElementById('closeRouteInfo');
     if (closeRouteInfo) {
         closeRouteInfo.addEventListener('click', function() {
-            document.getElementById('routeInfoBox').classList.remove('active');
+            const routeInfoBox = document.getElementById('routeInfoBox');
+            if (routeInfoBox) routeInfoBox.classList.remove('active');
         });
     }
 
