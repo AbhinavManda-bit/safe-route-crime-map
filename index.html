@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SafeRoute Crime Map</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { 
+            margin: 0; 
+            font-family: Arial, sans-serif; 
+            background: #111; 
+            color: #eee; 
+        }
+        
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+        }
+
+        .sidebar {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: #222;
+            padding: 15px;
+            padding-top: 45px;
+            border-radius: 10px;
+            z-index: 999;
+            min-width: 260px;
+            max-width: 600px;
+            width: 260px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        
+        .sidebar-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 30px;
+            padding: 8px 15px;
+            background: #333;
+            border-radius: 10px 10px 0 0;
+            cursor: move;
+            user-select: none;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .reset-btn {
+            background: #555;
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 20;
+        }
+        
+        .reset-btn:hover {
+            background: #777;
+        }
+        
+        .date-filter-btn {
+            background: #0066cc;
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 20;
+        }
+        
+        .date-filter-btn:hover {
+            background: #0088ee;
+        }
+        
+        .date-filter-popup {
+            display: none;
+            position: absolute;
+            top: 40px;
+            left: 15px;
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 30;
+            min-width: 280px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+        }
+        
+        .date-filter-popup.active {
+            display: block;
+        }
+        
+        .date-slider-container {
+            margin: 10px 0;
+        }
+        
+        .date-slider-container label {
+            display: block;
+            color: #eee;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .date-slider-container input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        
+        .date-value {
+            color: #0066cc;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .date-filter-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .date-filter-actions button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .apply-date-btn {
+            background: #00cc66;
+            color: white;
+        }
+        
+        .apply-date-btn:hover {
+            background: #00ee77;
+        }
+        
+        .cancel-date-btn {
+            background: #666;
+            color: white;
+        }
+        
+        .cancel-date-btn:hover {
+            background: #888;
+        }
+        
+        .resize-handle {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            cursor: nwse-resize;
+            background: #f55;
+            border-radius: 3px;
+            z-index: 10;
+        }
+        
+        .resize-handle:hover {
+            background: #ff7777;
+        }
+        
+        .resize-handle::before {
+            content: "⤡";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+        }
+        
+        /* Report Crime Box Styles */
+        .report-crime-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #cc0000;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 200px;
+        }
+        
+        .report-crime-box:hover {
+            background: #dd0000;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+        }
+        
+        .report-crime-header {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+        }
+        
+        .report-crime-header::before {
+            content: "⚠";
+            font-size: 20px;
+        }
+        
+        .report-crime-dropdown {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .report-crime-dropdown.active {
+            display: block;
+        }
+        
+        .report-crime-online {
+            display: block;
+            background: #fff;
+            color: #cc0000;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+        
+        .report-crime-online:hover {
+            background: #ffeeee;
+            transform: scale(1.02);
+        }
+        
+        .report-crime-divider {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            margin: 10px 0;
+            font-weight: normal;
+        }
+        
+        .emergency-numbers {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .emergency-number {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 6px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        .emergency-number:hover {
+            background: rgba(0,0,0,0.35);
+        }
+        
+        .emergency-number a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 18px;
+            letter-spacing: 1px;
+        }
+        
+        .emergency-number a:hover {
+            text-decoration: underline;
+        }
+        
+        .number-label {
+            font-weight: normal;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+        }
+        
+        .error-notification {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #cc0000;
+            color: white;
+            padding: 12px 40px 12px 20px;
+            border-radius: 8px;
+            z-index: 1100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+            max-width: 500px;
+            font-size: 14px;
+            animation: slideDown 0.3s ease;
+        }
+        
+        .error-notification.active {
+            display: block;
+        }
+        
+        .error-notification .close-notification {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            line-height: 20px;
+        }
+        
+        .error-notification .close-notification:hover {
+            color: #ffcccc;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        
+        .route-info-box {
+            display: none;
+            position: absolute;
+            top: 180px;
+            right: 10px;
+            background: #0066cc;
+            padding: 12px 18px;
+            border-radius: 8px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            color: white;
+            min-width: 300px;
+            max-width: 350px;
+        }
+        
+        .route-info-box.active {
+            display: block;
+        }
+        
+        .route-info-box h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: white;
+        }
+        
+        .route-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .route-option {
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .route-option:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .route-option.selected {
+            background: rgba(255,255,255,0.3);
+            border-color: white;
+        }
+        
+        .route-option-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .route-option-title {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .route-option-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .route-option-badge.safest {
+            background: #00cc66;
+            color: white;
+        }
+        
+        .route-option-badge.alternative {
+            background: #666;
+            color: white;
+        }
+        
+        .route-option-details {
+            font-size: 12px;
+            display: flex;
+            gap: 12px;
+        }
+        
+        .route-info-box .close-route-info {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+        }
+        
+        .route-info-box .close-route-info:hover {
+            color: #ffcccc;
+        }
+        
+        .sidebar h2 { 
+            color: #f55; 
+            margin-top: 0; 
+            font-size: 22px;
+        }
+
+        .checkbox-container label {
+            display: block;
+            font-size: 18px;
+            margin: 5px 0;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .checkbox-container input {
+            width: 24px; 
+            height: 24px; 
+            margin-right: 6px;
+            vertical-align: middle;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            border: 2px solid #666;
+            border-radius: 4px;
+            position: relative;
+        }
+        
+        .checkbox-container input:checked::after {
+            content: "✓";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .checkbox-container input[value="THEFT"] {
+            background-color: #ff4444;
+            border-color: #ff4444;
+        }
+        
+        .checkbox-container input[value="BATTERY"] {
+            background-color: #ff8844;
+            border-color: #ff8844;
+        }
+        
+        .checkbox-container input[value="ASSAULT"] {
+            background-color: #ffcc00;
+            border-color: #ffcc00;
+        }
+        
+        .checkbox-container input[value="ROBBERY"] {
+            background-color: #cc0000;
+            border-color: #cc0000;
+        }
+        
+        .checkbox-container input[value="HATE_CRIME"] {
+            background-color: #9900ff;
+            border-color: #9900ff;
+        }
+        
+        .checkbox-container input:not(:checked) {
+            opacity: 0.4;
+        }
+
+        .address-input {
+            margin: 6px 0;
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .autocomplete-container {
+            position: relative;
+        }
+        
+        .autocomplete-suggestions {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 0 0 6px 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        
+        .autocomplete-suggestions.active {
+            display: block;
+        }
+        
+        .autocomplete-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+            color: #eee;
+            font-size: 13px;
+        }
+        
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        
+        .autocomplete-item:hover {
+            background: #444;
+        }
+        
+        .autocomplete-item .address-main {
+            font-weight: bold;
+            color: #0066cc;
+        }
+        
+        .autocomplete-item .address-detail {
+            font-size: 11px;
+            color: #aaa;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            background: #f55;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover { 
+            background: #ff7777; 
+        }
+        
+        .btn:active {
+            background: #cc0000;
+        }
+
+        .legend {
+            background: #222;
+            padding: 8px;
+            border-radius: 6px;
+            color: #eee;
+            margin-top: 10px;
+        }
+        
+        .legend strong {
+            font-size: 16px;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .legend span {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 6px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-notification" id="errorNotification">
+        <button class="close-notification" id="closeNotification">×</button>
+        <span id="errorMessage"></span>
+    </div>
+
+    <div class="report-crime-box" id="reportCrimeBox">
+        <div class="report-crime-header">Report a Crime</div>
+        <div class="report-crime-dropdown" id="reportCrimeDropdown">
+            <a href="https://secure.coplogic.com/dors/en/filing/submitreport?dynparam=1763275277360" 
+               target="_blank" 
+               class="report-crime-online">
+                📝 Report Crime Online
+            </a>
+            <div class="report-crime-divider">OR</div>
+            <div class="emergency-numbers">
+                <div class="emergency-number">
+                    <span class="number-label">🚨 Emergency:</span>
+                    <a href="tel:911">911</a>
+                </div>
+                <div class="emergency-number">
+                    <span class="number-label">📞 Non-Emergency:</span>
+                    <a href="tel:311">311</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="route-info-box" id="routeInfoBox">
+        <button class="close-route-info" id="closeRouteInfo">×</button>
+        <h3>Route Options</h3>
+        <div class="route-options" id="routeOptions">
+            <!-- Route options will be inserted here -->
+        </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="reset-btn" id="resetBtn">Reset Position</button>
+            <button class="date-filter-btn" id="dateFilterBtn">Date Filter</button>
+            <div class="resize-handle" id="resizeHandle"></div>
+        </div>
+        
+        <div class="date-filter-popup" id="dateFilterPopup">
+            <h3 style="margin-top: 0; color: #0066cc;">Filter by Date Range</h3>
+            
+            <div class="date-slider-container">
+                <label>Start Date: <span class="date-value" id="startDateValue">Loading...</span></label>
+                <input type="range" id="startDateSlider" min="0" max="100" value="0">
+            </div>
+            
+            <div class="date-slider-container">
+                <label>End Date: <span class="date-value" id="endDateValue">Loading...</span></label>
+                <input type="range" id="endDateSlider" min="0" max="100" value="100">
+            </div>
+            
+            <div class="date-filter-actions">
+                <button class="apply-date-btn" id="applyDateBtn">Apply</button>
+                <button class="cancel-date-btn" id="cancelDateBtn">Cancel</button>
+            </div>
+        </div>
+        
+        <h2>SafeRoute Filters</h2>
+        <div class="checkbox-container">
+            <label><input type="checkbox" class="crime-filter" value="THEFT"> Theft</label>
+            <label><input type="checkbox" class="crime-filter" value="BATTERY"> Battery</label>
+            <label><input type="checkbox" class="crime-filter" value="ASSAULT"> Assault</label>
+            <label><input type="checkbox" class="crime-filter" value="ROBBERY"> Robbery</label>
+            <label><input type="checkbox" class="crime-filter" value="HATE_CRIME"> Gender Hate Crime</label>
+        </div>
+
+        <div class="autocomplete-container">
+            <input type="text" id="startInput" class="address-input" placeholder="Start Address" autocomplete="off">
+            <div class="autocomplete-suggestions" id="startSuggestions"></div>
+        </div>
+        
+        <div class="autocomplete-container">
+            <input type="text" id="endInput" class="address-input" placeholder="End Address" autocomplete="off">
+            <div class="autocomplete-suggestions" id="endSuggestions"></div>
+        </div>
+        
+        <button id="routeBtn" class="btn">Find Safe Route</button>
+
+        <div class="legend">
+            <strong>Crime Legend</strong>
+            <div><span style="background:#ff4444"></span> Theft</div>
+            <div><span style="background:#ff8844"></span> Battery</div>
+            <div><span style="background:#ffcc00"></span> Assault</div>
+            <div><span style="background:#cc0000"></span> Robbery</div>
+            <div><span style="background:#9900ff"></span> Gender Hate Crime</div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
